@@ -1,0 +1,99 @@
+---
+title: "Extracting variable names and labels"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+require(haven)
+require(stringr)
+```
+
+Using the `haven` package (part of the tidyverse), read in SAS files for 12th grade by year.
+```{r import_from_SAS, message = FALSE, warning = FALSE}
+get_helpful_name = function(path = path,
+                            year = year,
+                            file_number = file_number,
+                            variable = variable) {
+  file_name = str_c(path, "y", year, "_", file_number,".sas7bdat")
+  this_year_data = read_sas(data_file = file_name)
+  
+  attr(this_year_data[[variable]], "label")
+  #this_year_data
+}
+
+get_helpful_name(path = "~/Documents/Code/MTF/MTFData/12th_grade/",
+                 year = 2018,
+                 file_number = 1,
+                 variable = 5) #can pass a variable name or a column number into this function
+```
+
+Create a fake tibble in the format I want my resulting tibble to be in, to practice with it.
+```{r}
+fake = tibble(
+  helpful_name = c("age", "age", "age"),
+  year = 2016:2018,
+  variable_name = c("XYZ", "XXX", "ZZZ"),
+  file_number = c(1, 1, 2)
+)
+
+knitr::kable(fake)
+knitr::kable(filter(fake, helpful_name == "age", year == 2017))
+```
+
+Create an empty tibble to fill in with real information:
+```{r}
+grade12_file1_mapping = tibble(
+  helpful_name = character(),
+  year = numeric(),
+  variable_name = character(),
+  file_number = numeric()
+)
+```
+
+A function to add mapping information into the database, year by year:
+```{r}
+add_year = function(path = path,
+                    table = table,
+                    year = year,
+                    file_number = file_number
+                    ) {
+  
+  file_name = str_c(path, "y", year, "_", file_number,".sas7bdat")
+  this_year_data = read_sas(data_file = file_name)
+  
+  for (col in 1:ncol(this_year_data)) {
+    year_abbr = str_sub(as.character(year), start = 3)
+    helpful_name = attr(this_year_data[[col]], "label")
+    helpful_name = str_replace(helpful_name, str_c("^", year_abbr), "yy")
+    helpful_name = str_replace(helpful_name, str_c("^BY", year_abbr, " "), "BYyy ")
+
+    table = add_row(table,
+                    helpful_name = helpful_name,
+                    year = year,
+                    variable_name = colnames(this_year_data)[col],
+                    file_number = file_number
+                    )
+  }
+  table
+}
+
+new_table = add_year(path = "~/Documents/Code/MTF/MTFData/12th_grade/",
+                    table = grade12_file1_mapping,
+                    year = 2018,
+                    file_number = 1)
+
+two_years = add_year(path = "~/Documents/Code/MTF/MTFData/12th_grade/",
+                    table = new_table,
+                    year = 2017,
+                    file_number = 1)
+
+two_years = two_years %>% 
+  arrange(., helpful_name) %>% 
+  group_by(., helpful_name) %>% 
+  mutate(., count = n())
+
+knitr::kable(two_years)
+```
+
